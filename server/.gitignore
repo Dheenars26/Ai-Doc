@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Production Build
+dist/
+
+# Uploads
+uploads/
+
+# Environment Variables
+.env
+.env*.local
+
+# Logs
+*.log
+logs/
+
+# Scratch Directory
+scratch/
