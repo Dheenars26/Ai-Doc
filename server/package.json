@@ -1,0 +1,31 @@
+{
+  "name": "ai-doc-assistant-simple-server",
+  "version": "1.0.0",
+  "description": "Simple AI Document Assistant Backend",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.19.2",
+    "mammoth": "^1.7.2",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.28.3",
+    "pdf-parse": "^1.1.1",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.11.24",
+    "@types/pdf-parse": "^1.1.4",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.3"
+  }
+}
