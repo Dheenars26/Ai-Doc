@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { generateGroundedAnswer } from '../services/aiService';
+import { generateGroundedAnswer, generateSuggestedQuestions } from '../services/aiService';
 import { documentStore } from '../utils/documentStore';
 
 /**
@@ -59,4 +59,38 @@ export const askQuestion = async (req: Request, res: Response): Promise<void> =>
     });
   }
 };
+
+/**
+ * Generates suggested questions for the active document.
+ */
+export const getSuggestedQuestions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const docText = documentStore.getDocumentText();
+    const fileName = documentStore.getFileName();
+
+    if (!fileName || !docText) {
+      res.status(200).json({
+        success: true,
+        questions: []
+      });
+      return;
+    }
+
+    console.log(`[Ask Controller] Generating suggested questions for "${fileName}"`);
+    const questions = await generateSuggestedQuestions(docText);
+
+    res.status(200).json({
+      success: true,
+      questions,
+    });
+  } catch (error) {
+    console.error('[Ask Controller] Error generating suggested questions:', error);
+    res.status(500).json({
+      success: false,
+      message: (error as Error).message || 'Failed to generate suggested questions.',
+    });
+  }
+};
+
 export default askQuestion;
+

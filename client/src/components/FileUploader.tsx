@@ -82,10 +82,10 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess }) =
         onDragOver={onDrag}
         onDragLeave={onDrag}
         onDrop={onDrop}
-        className={`w-full min-h-[220px] rounded-2xl border border-dashed flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all glass-panel border-glow-hover ${
+        className={`w-full min-h-[220px] rounded-2xl border border-dashed flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all backdrop-blur-xl border-glow-hover ${
           isDragActive 
-            ? 'border-purple-500 bg-purple-500/5' 
-            : 'border-white/5 bg-zinc-950/10 hover:bg-zinc-900/10'
+            ? 'border-purple-500 bg-purple-500/10' 
+            : 'border-zinc-200/50 dark:border-white/5 bg-white/60 dark:bg-zinc-950/35 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 shadow-lg'
         }`}
       >
         <input 
@@ -100,18 +100,18 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess }) =
         <label htmlFor="file-upload-input" className="cursor-pointer flex flex-col items-center justify-center w-full h-full">
           {isUploading ? (
             <div className="flex flex-col items-center gap-3">
-              <Loader className="h-10 w-10 text-purple-400 animate-spin" />
-              <span className="text-sm font-semibold text-zinc-200">Parsing document details...</span>
-              <span className="text-xs text-zinc-500">Extracting raw text segments</span>
+              <Loader className="h-10 w-10 text-purple-500 dark:text-purple-400 animate-spin" />
+              <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Parsing document details...</span>
+              <span className="text-xs text-zinc-400 dark:text-zinc-500">Extracting raw text segments</span>
             </div>
           ) : (
             <>
-              <div className="p-3.5 bg-purple-950/20 rounded-2xl border border-purple-900/30 text-purple-400 mb-4 glow-primary">
+              <div className="p-3.5 bg-purple-500/10 dark:bg-purple-950/20 rounded-2xl border border-purple-500/20 dark:border-purple-900/30 text-purple-600 dark:text-purple-400 mb-4 glow-primary">
                 <UploadCloud className="h-8 w-8" />
               </div>
-              <span className="text-base font-bold text-white mb-1">Upload study document</span>
-              <span className="text-sm text-zinc-400">Drag & drop your file here, or click to browse</span>
-              <span className="text-xs text-zinc-600 mt-2">Supports PDF, DOCX, TXT, PNG, JPG, JPEG (Max 100MB)</span>
+              <span className="text-base font-bold text-zinc-900 dark:text-white mb-1">Upload study document</span>
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">Drag & drop your file here, or click to browse</span>
+              <span className="text-xs text-zinc-450 dark:text-zinc-600 mt-2">Supports PDF, DOCX, TXT, PNG, JPG, JPEG (Max 100MB)</span>
             </>
           )}
         </label>

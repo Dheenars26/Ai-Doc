@@ -26,24 +26,36 @@ if (provider === 'openai' && OPENAI_KEY) {
 const runOfflineMockRAG = (docText: string, question: string): string => {
   const cleanQuestion = question.toLowerCase().replace(/[?.,!]/g, '').trim();
   
-  // Check if it's an overview/summarization request (e.g. asking generally about the whole document)
+  // 1. Check for greetings
+  const greetings = ['hi', 'hello', 'hey', 'greetings', 'how are you', 'good morning', 'good afternoon'];
+  if (greetings.some(g => cleanQuestion === g || cleanQuestion.startsWith(g + ' '))) {
+    return "Hello! I am your AI Document Assistant. How can I help you with your document today?";
+  }
+
+  // 2. Check if it's an overview/summarization/key points request
   const isOverviewRequest = 
-    /^(summary|summarize|overview)$/i.test(cleanQuestion) ||
-    /tell me about this document|what is this document|describe this document/i.test(cleanQuestion);
+    /summary|summarize|overview|outline|points|key points|important points|takeaways|highlight/i.test(cleanQuestion) ||
+    /tell me about|what is this|describe this/i.test(cleanQuestion);
   
   if (isOverviewRequest) {
+    if (!docText || docText.trim().length === 0) {
+      return "The active document appears to be empty. Please type some text in the editor or upload a file first!";
+    }
     const sentences = docText
       .split(/[.!?\n]/)
       .map(s => s.trim())
       .filter(s => s.length > 10);
       
     if (sentences.length > 0) {
-      const summaryText = sentences.slice(0, 4).join('. ') + '.';
-      return `[Offline Grounded Summary] Here is an overview of the document: "${summaryText}"`;
+      return `[Offline Grounded Summary] Here are key points from the document:\n\n${sentences.slice(0, 4).map(s => `- ${s}`).join('\n')}`;
     }
   }
 
-  // Stopwords list to prevent matching on common pronouns, verbs, and question words
+  if (!docText || docText.trim().length === 0) {
+    return "No document is active in memory. Please upload a document or type in the editor so I can assist you!";
+  }
+
+  // 3. Fallback keyword matching
   const stopwords = new Set([
     'the', 'this', 'that', 'they', 'them', 'these', 'those', 'their', 'there',
     'what', 'when', 'where', 'which', 'who', 'whom', 'whose', 'why', 'how',
@@ -60,10 +72,10 @@ const runOfflineMockRAG = (docText: string, question: string): string => {
 
   const keywords = cleanQuestion
     .split(' ')
-    .filter(w => w.length > 1 && !stopwords.has(w)); // allow keywords of length > 1 (e.g. 'js', 'ui')
+    .filter(w => w.length > 1 && !stopwords.has(w));
   
   if (keywords.length === 0) {
-    return "I couldn't find this information in the uploaded document.";
+    return `I received your question: "${question}". Please ask something specific matching keywords in the document or ask me to summarize it!`;
   }
 
   // Split document into lines to parse structured sections
@@ -98,7 +110,76 @@ const runOfflineMockRAG = (docText: string, question: string): string => {
     return `[Offline Grounded Answer] Here is what I found in the document:\n\n${resultLines.join('\n')}`;
   }
 
-  return "I couldn't find this information in the uploaded document.";
+  return `I couldn't find a direct match for "${keywords.join(', ')}" in the document. Try asking me to summarize it or check your spelling!`;
+};
+
+/**
+ * Local lightweight semantic chunk selector (RAG).
+ * Evaluates the query keywords against paragraphs to fetch the most relevant context,
+ * minimizing token overhead, API request size, and model processing latency.
+ */
+const getRelevantContext = (docText: string, question: string, maxChars = 20000): string => {
+  if (!docText || docText.length <= maxChars) {
+    return docText;
+  }
+
+  // If user wants a summary or outline, send head and tail of doc to capture intro and conclusion
+  const isSummaryRequest = /summary|summarize|overview|outline|points|key points|takeaways|highlight/i.test(question);
+  if (isSummaryRequest) {
+    const headChars = Math.floor(maxChars * 0.7);
+    const tailChars = Math.floor(maxChars * 0.3);
+    return `${docText.substring(0, headChars)}\n\n[... Context Truncated for Latency Optimization ...]\n\n${docText.substring(docText.length - tailChars)}`;
+  }
+
+  // Split document into structured blocks/paragraphs
+  const paragraphs = docText.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
+  if (paragraphs.length <= 1) {
+    return docText.substring(0, maxChars);
+  }
+
+  const cleanQuestion = question.toLowerCase().replace(/[?.,!]/g, '').trim();
+  const keywords = cleanQuestion.split(/\s+/).filter(w => w.length > 2);
+
+  if (keywords.length === 0) {
+    return docText.substring(0, maxChars);
+  }
+
+  // Overlap keyword matching scoring
+  const scoredParagraphs = paragraphs.map(para => {
+    const lowerPara = para.toLowerCase();
+    let score = 0;
+    keywords.forEach(word => {
+      if (lowerPara.includes(word)) {
+        score += 1.0;
+        // Bonus points for multiple occurrences
+        const occurrences = lowerPara.split(word).length - 1;
+        score += occurrences * 0.5;
+      }
+    });
+    return { para, score };
+  });
+
+  // Sort by highest score first
+  scoredParagraphs.sort((a, b) => b.score - a.score);
+
+  const selected: string[] = [];
+  let totalLength = 0;
+  for (const item of scoredParagraphs) {
+    if (totalLength + item.para.length > maxChars) {
+      if (selected.length === 0) {
+        selected.push(item.para.substring(0, maxChars));
+      }
+      break;
+    }
+    selected.push(item.para);
+    totalLength += item.para.length;
+  }
+
+  // Keep paragraphs in their original document order to maintain context flow
+  const selectedSet = new Set(selected);
+  const orderedSelection = paragraphs.filter(p => selectedSet.has(p));
+
+  return orderedSelection.join('\n\n');
 };
 
 /**
@@ -115,20 +196,18 @@ export const generateGroundedAnswer = async (
   const systemPrompt = `
 You are a helpful AI Document Assistant.
 Your goal is to answer the user's question.
-You MUST rely ONLY on facts mentioned in the document context (provided as text or attached document media).
-
-CRITICAL INSTRUCTIONS:
-1. Rely ONLY on the clear facts mentioned in the document context.
-2. If the answer cannot be explicitly found in the context, you MUST respond EXACTLY with this string:
-   "I couldn't find this information in the uploaded document."
-   Do NOT make up an answer, summarize general knowledge, or write any other explanation.
-3. Every answer must be factual and completely grounded.
-4. You are provided with the conversation history. Use it to resolve pronouns or follow-up references (like "that", "it", "they", "first point", "previous answer"), but do NOT use history to inject any external facts not found in the document context.
+If the question is about the document, you should answer using the facts in the document context.
+If the user asks for summaries, key points, or highlights, generate them using the document content.
+If the user greets you (e.g. "Hi", "Hello"), asks general formatting/coding questions, or engages in casual conversation, respond in a helpful, conversational manner.
+Try to use the document context whenever relevant, but do not refuse to answer conversational or general questions.
 `;
+
+  // Dynamically select relevant text chunk to save tokens and improve response latency
+  const relevantContext = getRelevantContext(docText, question);
 
   const userPrompt = `
 DOCUMENT CONTEXT:
-${docText}
+${relevantContext}
 
 -----------------
 
@@ -137,6 +216,10 @@ ${question}
 
 Grounded Answer:
 `;
+
+  // Prevent chat payload bloat by only keeping the last 10 messages (5 turns)
+  const maxHistory = 10;
+  const recentHistory = history.slice(-maxHistory);
 
   try {
     if (provider === 'openai') {
@@ -148,7 +231,7 @@ Grounded Answer:
       const messages: any[] = [{ role: 'system', content: systemPrompt }];
       
       // Inject history
-      history.forEach((m) => {
+      recentHistory.forEach((m) => {
         messages.push({
           role: m.role === 'assistant' ? 'assistant' : 'user',
           content: m.content
@@ -179,7 +262,7 @@ Grounded Answer:
 
       // Format contents for multi-turn chat
       const contents: any[] = [];
-      history.forEach((m) => {
+      recentHistory.forEach((m) => {
         contents.push({
           role: m.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: m.content }]
@@ -187,12 +270,17 @@ Grounded Answer:
       });
 
       let currentParts: any[] = [];
-      // If we have a file buffer and it's a PDF or an Image, pass it directly to Gemini
-      if (fileBuffer && mimeType && (mimeType === 'application/pdf' || mimeType.startsWith('image/'))) {
+      // Send raw file buffer only for images or scanned PDFs without extractable text
+      const isMultimodalRequired = !!(fileBuffer && mimeType && (
+        mimeType.startsWith('image/') || 
+        (mimeType === 'application/pdf' && (!docText || docText.trim().length === 0))
+      ));
+
+      if (isMultimodalRequired) {
         currentParts.push({
           inlineData: {
-            data: fileBuffer.toString('base64'),
-            mimeType: mimeType,
+            data: fileBuffer!.toString('base64'),
+            mimeType: mimeType!,
           },
         });
         
@@ -255,20 +343,18 @@ export async function* generateGroundedAnswerStream(
   const systemPrompt = `
 You are a helpful AI Document Assistant.
 Your goal is to answer the user's question.
-You MUST rely ONLY on facts mentioned in the document context (provided as text or attached document media).
-
-CRITICAL INSTRUCTIONS:
-1. Rely ONLY on the clear facts mentioned in the document context.
-2. If the answer cannot be explicitly found in the context, you MUST respond EXACTLY with this string:
-   "I couldn't find this information in the uploaded document."
-   Do NOT make up an answer, summarize general knowledge, or write any other explanation.
-3. Every answer must be factual and completely grounded.
-4. You are provided with the conversation history. Use it to resolve pronouns or follow-up references (like "that", "it", "they", "first point", "previous answer"), but do NOT use history to inject any external facts not found in the document context.
+If the question is about the document, you should answer using the facts in the document context.
+If the user asks for summaries, key points, or highlights, generate them using the document content.
+If the user greets you (e.g. "Hi", "Hello"), asks general formatting/coding questions, or engages in casual conversation, respond in a helpful, conversational manner.
+Try to use the document context whenever relevant, but do not refuse to answer conversational or general questions.
 `;
+
+  // Dynamically select relevant text chunk to save tokens and improve response latency
+  const relevantContext = getRelevantContext(docText, question);
 
   const userPrompt = `
 DOCUMENT CONTEXT:
-${docText}
+${relevantContext}
 
 -----------------
 
@@ -277,6 +363,10 @@ ${question}
 
 Grounded Answer:
 `;
+
+  // Prevent chat payload bloat by only keeping the last 10 messages (5 turns)
+  const maxHistory = 10;
+  const recentHistory = history.slice(-maxHistory);
 
   try {
     if (provider === 'openai') {
@@ -290,7 +380,7 @@ Grounded Answer:
       const messages: any[] = [{ role: 'system', content: systemPrompt }];
       
       // Inject history
-      history.forEach((m) => {
+      recentHistory.forEach((m) => {
         messages.push({
           role: m.role === 'assistant' ? 'assistant' : 'user',
           content: m.content
@@ -327,7 +417,7 @@ Grounded Answer:
 
       // Format contents for multi-turn chat
       const contents: any[] = [];
-      history.forEach((m) => {
+      recentHistory.forEach((m) => {
         contents.push({
           role: m.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: m.content }]
@@ -335,11 +425,17 @@ Grounded Answer:
       });
 
       let currentParts: any[] = [];
-      if (fileBuffer && mimeType && (mimeType === 'application/pdf' || mimeType.startsWith('image/'))) {
+      // Send raw file buffer only for images or scanned PDFs without extractable text
+      const isMultimodalRequired = !!(fileBuffer && mimeType && (
+        mimeType.startsWith('image/') || 
+        (mimeType === 'application/pdf' && (!docText || docText.trim().length === 0))
+      ));
+
+      if (isMultimodalRequired) {
         currentParts.push({
           inlineData: {
-            data: fileBuffer.toString('base64'),
-            mimeType: mimeType,
+            data: fileBuffer!.toString('base64'),
+            mimeType: mimeType!,
           },
         });
         currentParts.push({
@@ -449,5 +545,111 @@ Edited Text:
     return `[Offline Edit Mode: ${command}] ${text}`;
   }
 };
+
+/**
+ * Generates exactly 3 suggested questions based on the document text.
+ */
+export const generateSuggestedQuestions = async (
+  docText: string
+): Promise<string[]> => {
+  const defaultQuestions = [
+    'Can you summarize the main points of this document?',
+    'What is the primary topic or purpose of this document?',
+    'Are there any key takeaways or action items?'
+  ];
+
+  if (!docText || docText.trim().length === 0) {
+    return defaultQuestions;
+  }
+
+  const systemPrompt = `
+You are a helpful AI Document Assistant.
+Analyze the provided document text and generate exactly 3 interesting, relevant, and diverse questions that a user might want to ask about it.
+Your questions should be specific to the document's content, rather than generic.
+
+CRITICAL INSTRUCTIONS:
+1. Return ONLY a valid JSON array of strings containing exactly 3 questions.
+   Example output format:
+   ["Specific question 1?", "Specific question 2?", "Specific question 3?"]
+2. Do NOT write any introduction, greetings, code block markers, formatting, or markdown wrappers. Output ONLY raw JSON text.
+`;
+
+  const userPrompt = `
+DOCUMENT CONTENT:
+"""
+${docText.substring(0, 15000)}
+"""
+
+3 Suggested Questions:
+`;
+
+  try {
+    let rawText = '';
+    if (provider === 'openai') {
+      if (!openaiClient) {
+        return defaultQuestions;
+      }
+      const response = await openaiClient.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.5,
+      });
+      rawText = response.choices[0]?.message?.content || '';
+    } else {
+      // Default to Gemini
+      if (!googleGenAI) {
+        return defaultQuestions;
+      }
+      const model = googleGenAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        systemInstruction: systemPrompt,
+      });
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: {
+          temperature: 0.5,
+        }
+      });
+      rawText = result.response.text().trim();
+    }
+
+    // Clean code fences if AI didn't follow instructions
+    let cleanedText = rawText.trim();
+    if (cleanedText.startsWith('```')) {
+      cleanedText = cleanedText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    }
+    
+    try {
+      const parsed = JSON.parse(cleanedText);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.slice(0, 3).map(q => String(q).trim());
+      }
+    } catch (parseError) {
+      console.warn('[AI Service] Failed to parse suggested questions JSON:', parseError, 'Raw response:', rawText);
+      
+      // Fallback parsing: look for lines starting with numbers or list indicators
+      const questions: string[] = [];
+      const lines = rawText.split('\n');
+      for (const line of lines) {
+        const cleanedLine = line.replace(/^\s*[-*#\d.]+\s*/, '').replace(/^["']|["']$/g, '').trim();
+        if (cleanedLine.endsWith('?') && cleanedLine.length > 10) {
+          questions.push(cleanedLine);
+        }
+        if (questions.length === 3) break;
+      }
+      if (questions.length >= 2) {
+        return questions;
+      }
+    }
+    return defaultQuestions;
+  } catch (error) {
+    console.error('[AI Service] Error generating suggested questions:', error);
+    return defaultQuestions;
+  }
+};
+
 
 

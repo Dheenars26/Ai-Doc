@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Copy, Check, Trash2, RotateCw, User } from 'lucide-react';
+import { Bot, Copy, Check, Trash2, RotateCw, User, FileSignature } from 'lucide-react';
 import { Message } from '../types/types';
 
 interface AnswerCardProps {
@@ -8,6 +8,7 @@ interface AnswerCardProps {
   onClear: () => void;
   isGenerating: boolean;
   disabled: boolean;
+  onInsertAtCursor?: (text: string) => void;
 }
 
 export const AnswerCard: React.FC<AnswerCardProps> = ({
@@ -15,7 +16,8 @@ export const AnswerCard: React.FC<AnswerCardProps> = ({
   onRegenerate,
   onClear,
   isGenerating,
-  disabled
+  disabled,
+  onInsertAtCursor
 }) => {
   const [copied, setCopied] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -91,15 +93,15 @@ export const AnswerCard: React.FC<AnswerCardProps> = ({
   if (messages.length === 0) return null;
 
   return (
-    <div className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 shadow-sm space-y-4 animate-scale-in transition-colors duration-200 flex flex-col max-h-[500px]">
+    <div className="w-full bg-white/70 dark:bg-zinc-900/60 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/40 rounded-2xl p-5 shadow-lg space-y-4 animate-scale-in transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/5 border-glow-hover flex flex-col max-h-[520px]">
       
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800/80 pb-3 select-none shrink-0">
+      <div className="flex items-center justify-between border-b border-zinc-150/60 dark:border-zinc-800/50 pb-3 select-none shrink-0">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-blue-50 dark:bg-blue-950/40 rounded-lg text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30">
+          <div className="p-1.5 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 dark:from-blue-500/20 dark:to-indigo-500/20 rounded-lg text-blue-600 dark:text-blue-400 border border-blue-100/30 dark:border-blue-900/20">
             <Bot className="h-4 w-4" />
           </div>
-          <span className="text-xs font-bold text-zinc-900 dark:text-zinc-50">
+          <span className="text-xs font-bold text-zinc-900 dark:text-zinc-55">
             Conversation Chat History
           </span>
         </div>
@@ -126,8 +128,8 @@ export const AnswerCard: React.FC<AnswerCardProps> = ({
           if (isUser) {
             return (
               <div key={m.id} className="flex flex-col items-end space-y-1 animate-scale-in">
-                <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-550 uppercase select-none mr-2">You</span>
-                <div className="bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 px-3.5 py-2.5 rounded-2xl rounded-tr-none text-xs max-w-[85%] select-text border border-zinc-200/30 dark:border-zinc-700/30 shadow-2xs font-sans">
+                <span className="text-[9px] font-bold text-zinc-450 dark:text-zinc-550 uppercase select-none mr-2">You</span>
+                <div className="bg-zinc-100/80 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-100 px-3.5 py-2.5 rounded-2xl rounded-tr-none text-xs max-w-[85%] select-text border border-zinc-200/30 dark:border-zinc-700/30 shadow-2xs font-sans">
                   {m.content}
                 </div>
               </div>
@@ -141,7 +143,7 @@ export const AnswerCard: React.FC<AnswerCardProps> = ({
               <div className="flex items-center gap-1 ml-2">
                 <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase select-none">AI Assistant</span>
               </div>
-              <div className="bg-blue-50/40 dark:bg-blue-950/15 text-zinc-800 dark:text-zinc-200 px-3.5 py-2.5 rounded-2xl rounded-tl-none text-xs max-w-[85%] select-text border border-blue-100/30 dark:border-blue-900/10 shadow-2xs w-full text-left">
+              <div className="bg-gradient-to-br from-blue-50/40 to-indigo-50/20 dark:from-blue-950/10 dark:to-indigo-950/5 text-zinc-800 dark:text-zinc-200 px-3.5 py-2.5 rounded-2xl rounded-tl-none text-xs max-w-[85%] select-text border border-blue-100/30 dark:border-blue-900/10 shadow-2xs w-full text-left">
                 {isPlaceholder ? (
                   <div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500 text-[11px] font-medium py-1 select-none animate-pulse">
                     <Bot className="h-3.5 w-3.5 animate-spin text-blue-500" />
@@ -161,32 +163,45 @@ export const AnswerCard: React.FC<AnswerCardProps> = ({
 
       {/* Footer controls */}
       {lastAiMessage && lastAiMessage.content !== '░' && (
-        <div className="flex items-center justify-between border-t border-zinc-150 dark:border-zinc-800/80 pt-3.5 select-none shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-150/60 dark:border-zinc-800/50 pt-3.5 select-none shrink-0">
           <button
             onClick={onRegenerate}
             disabled={isGenerating || disabled}
-            className="flex items-center gap-1.5 px-3 py-2 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-all duration-200 cursor-pointer disabled:opacity-40"
+            className="flex items-center gap-1.5 px-3 py-2 border border-zinc-200/60 dark:border-zinc-800/50 hover:border-zinc-350 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-all duration-200 cursor-pointer disabled:opacity-40"
           >
             <RotateCw className={`h-3.5 w-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
             <span>Regenerate</span>
           </button>
           
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer hover:shadow-lg hover:shadow-blue-500/10"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3.5 w-3.5 text-white" />
-                <span>Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3.5 w-3.5" />
-                <span>Copy Last</span>
-              </>
+          <div className="flex items-center gap-2">
+            {onInsertAtCursor && (
+              <button
+                onClick={() => onInsertAtCursor(lastAiMessage.content)}
+                className="flex items-center gap-1.5 px-3 py-2 border border-blue-200 dark:border-blue-900/30 hover:bg-blue-500/5 text-blue-600 dark:text-blue-450 hover:border-blue-300 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer"
+                title="Insert AI response at editor cursor"
+              >
+                <FileSignature className="h-3.5 w-3.5" />
+                <span>Insert at Caret</span>
+              </button>
             )}
-          </button>
+
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer hover:shadow-lg hover:shadow-blue-500/20"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-white" />
+                  <span>Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>Copy Last</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       )}
 

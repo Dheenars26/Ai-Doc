@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { uploadDocument } from '../controllers/uploadController';
-import { askQuestion } from '../controllers/askController';
+import { askQuestion, getSuggestedQuestions } from '../controllers/askController';
 import { askQuestionStream } from '../controllers/streamController';
 import { editText } from '../controllers/editController';
 import { documentStore } from '../utils/documentStore';
@@ -52,6 +52,7 @@ router.post('/upload', upload.single('file'), uploadDocument);
 router.post('/ask', askQuestion);
 router.post('/ask-stream', askQuestionStream);
 router.post('/edit-text', editText);
+router.get('/suggested-questions', getSuggestedQuestions);
 
 // Get active document status endpoint
 router.get('/document', (req, res) => {
