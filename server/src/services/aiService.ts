@@ -47,7 +47,7 @@ const runOfflineMockRAG = (docText: string, question: string): string => {
       .filter(s => s.length > 10);
       
     if (sentences.length > 0) {
-      return `[Offline Grounded Summary] Here are key points from the document:\n\n${sentences.slice(0, 4).map(s => `- ${s}`).join('\n')}`;
+      return `[Your Result] Here are key points from the document:\n\n${sentences.slice(0, 4).map(s => `- ${s}`).join('\n')}`;
     }
   }
 
@@ -107,7 +107,7 @@ const runOfflineMockRAG = (docText: string, question: string): string => {
       resultLines.push(nextLine);
     }
     
-    return `[Offline Grounded Answer] Here is what I found in the document:\n\n${resultLines.join('\n')}`;
+    return `[Your Result] Here is what I found in the document:\n\n${resultLines.join('\n')}`;
   }
 
   return `I couldn't find a direct match for "${keywords.join(', ')}" in the document. Try asking me to summarize it or check your spelling!`;
